@@ -18,5 +18,8 @@ type Job struct {
 }
 
 func (j *Job) ViewModel() *JobViewModel {
-	return &JobViewModel{Name: j.Name}
+	return &JobViewModel{
+		ID:   j.ID,
+		Name: j.Name,
+	}
 }

@@ -3,8 +3,10 @@ package gj
 import (
 	"net/http"
 
-	"github.com/coreos/go-log/log"
+	"log"
+
 	"github.com/gin-gonic/gin"
+	"github.com/pborman/uuid"
 )
 
 var (
@@ -31,11 +33,13 @@ func (a *APIServer) ShowJobs(c *gin.Context) {
 func (a *APIServer) CreateJob(c *gin.Context) {
 	var jvm JobViewModel
 	if err := c.BindJSON(&jvm); err != nil {
-		log.Errorf("failed to parse json: %s", err)
+		log.Printf("failed to parse json: %s", err)
 		c.JSON(http.StatusBadRequest, respBadRequest)
 		return
 	}
-	a.Jobs["id"] = jvm.Job()
+	id := uuid.NewUUID()
+	jvm.ID = id.String()
+	a.Jobs[jvm.ID] = jvm.Job()
 	c.IndentedJSON(http.StatusOK, respOK)
 	return
 }
@@ -59,6 +63,7 @@ type APIResponseShowJobs struct {
 }
 
 type JobViewModel struct {
+	ID   string
 	Name string `json:"name"`
 }
 
