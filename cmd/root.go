@@ -4,7 +4,7 @@ import "github.com/spf13/cobra"
 
 var RootCmd = &cobra.Command{
 	Use:   "gj",
-	Short: "gj is job manager",
+	Short: "gj is process manager",
 	Long:  ``,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Do Stuff Here

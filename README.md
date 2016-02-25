@@ -2,20 +2,20 @@
 
 ## HTTP API
 
-### List job
+### List process
 
-GET `/api/v1/jobs`
+GET `/api/v1/procs`
 
-### Create job
+### Create process
 
-POST `/api/v1/jobs`
+POST `/api/v1/procs`
 
-### Show job details
+### Show process details
 
-GET `/api/v1/jobs/<job_id>`
+GET `/api/v1/procs/<process_id>`
 
-### Control job
+### Control process
 
-GET `/api/v1/jobs/<job_id>/start`
+GET `/api/v1/procs/<process_id>/start`
 
-GET `/api/v1/jobs/<job_id>/stop`
+GET `/api/v1/procs/<process_id>/stop`

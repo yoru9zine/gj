@@ -19,8 +19,8 @@ func NewClient(url string) *Client {
 	}
 }
 
-func (c *Client) PS() (map[string]*JobViewModel, error) {
-	req, err := http.NewRequest("GET", c.url+"/api/v1/jobs", nil)
+func (c *Client) PS() (map[string]*ProcessViewModel, error) {
+	req, err := http.NewRequest("GET", c.url+"/api/v1/procs", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %s", err)
 	}
@@ -33,9 +33,9 @@ func (c *Client) PS() (map[string]*JobViewModel, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read body: %s", err)
 	}
-	respModel := APIResponseShowJobs{}
+	respModel := APIResponseShowProcs{}
 	if err := json.Unmarshal(b, &respModel); err != nil {
 		return nil, fmt.Errorf("failed to parse json: %s", err)
 	}
-	return respModel.Jobs, nil
+	return respModel.Procs, nil
 }

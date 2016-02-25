@@ -16,40 +16,40 @@ var (
 
 type APIServer struct {
 	*gin.Engine
-	Jobs Jobs
+	Procs Processes
 }
 
 func (a *APIServer) Setup() {
-	a.GET("/api/v1/jobs", a.ShowJobs)
-	a.POST("/api/v1/jobs", a.CreateJob)
-	a.GET("/api/v1/jobs/:job_id/start", a.StartJob)
+	a.GET("/api/v1/procs", a.ShowProcs)
+	a.POST("/api/v1/procs", a.CreateProc)
+	a.GET("/api/v1/procs/:pid/start", a.StartProc)
 }
 
-func (a *APIServer) ShowJobs(c *gin.Context) {
-	models := a.Jobs.ViewModels()
-	resp := APIResponseShowJobs{respOK, models}
+func (a *APIServer) ShowProcs(c *gin.Context) {
+	models := a.Procs.ViewModels()
+	resp := APIResponseShowProcs{respOK, models}
 	c.IndentedJSON(http.StatusOK, resp)
 }
 
-func (a *APIServer) CreateJob(c *gin.Context) {
-	var jvm JobViewModel
-	if err := c.BindJSON(&jvm); err != nil {
+func (a *APIServer) CreateProc(c *gin.Context) {
+	var pvm ProcessViewModel
+	if err := c.BindJSON(&pvm); err != nil {
 		log.Printf("failed to parse json: %s", err)
 		c.JSON(http.StatusBadRequest, respBadRequest)
 		return
 	}
 	id := uuid.NewUUID()
-	jvm.ID = id.String()
-	a.Jobs[jvm.ID] = jvm.Job()
+	pvm.ID = id.String()
+	a.Procs[pvm.ID] = pvm.Process()
 	c.IndentedJSON(http.StatusOK, respOK)
 	return
 }
 
-func (a *APIServer) StartJob(c *gin.Context) {
-	jobID := c.Param("job_id")
-	err := a.Jobs[jobID].Start()
+func (a *APIServer) StartProc(c *gin.Context) {
+	pid := c.Param("pid")
+	err := a.Procs[pid].Start()
 	if err != nil {
-		log.Printf("error at job start: %s", err)
+		log.Printf("error at starting process: %s", err)
 		c.String(http.StatusInternalServerError, "ng")
 	}
 	c.String(http.StatusOK, "ok")
@@ -58,7 +58,7 @@ func (a *APIServer) StartJob(c *gin.Context) {
 func NewAPIServer() *APIServer {
 	s := &APIServer{
 		Engine: gin.Default(),
-		Jobs:   map[string]*Job{},
+		Procs:  map[string]*Process{},
 	}
 	s.Setup()
 	return s
@@ -68,7 +68,7 @@ type APIResponseModel struct {
 	Msg string `json:"message"`
 }
 
-type APIResponseShowJobs struct {
+type APIResponseShowProcs struct {
 	APIResponseModel
-	Jobs map[string]*JobViewModel `json:"jobs"`
+	Procs map[string]*ProcessViewModel `json:"procs"`
 }

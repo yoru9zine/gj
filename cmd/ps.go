@@ -14,15 +14,15 @@ func init() {
 
 var PSCmd = &cobra.Command{
 	Use:   "ps",
-	Short: "Show job list",
+	Short: "Show process list",
 	Run: func(cmd *cobra.Command, args []string) {
 		client := gj.NewClient(fmt.Sprintf("http://localhost:%d", port))
 		models, err := client.PS()
 		if err != nil {
 			log.Fatalf("error: %s", err)
 		}
-		for id, job := range models {
-			fmt.Printf("%s\t%s\n", id, job.Name)
+		for _, proc := range models {
+			fmt.Printf("%s\t%s\n", proc.ID, proc.Name)
 		}
 	},
 }
