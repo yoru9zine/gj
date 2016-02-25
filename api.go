@@ -22,6 +22,7 @@ type APIServer struct {
 func (a *APIServer) Setup() {
 	a.GET("/api/v1/jobs", a.ShowJobs)
 	a.POST("/api/v1/jobs", a.CreateJob)
+	a.GET("/api/v1/jobs/:job_id/start", a.StartJob)
 }
 
 func (a *APIServer) ShowJobs(c *gin.Context) {
@@ -44,6 +45,16 @@ func (a *APIServer) CreateJob(c *gin.Context) {
 	return
 }
 
+func (a *APIServer) StartJob(c *gin.Context) {
+	jobID := c.Param("job_id")
+	err := a.Jobs[jobID].Start()
+	if err != nil {
+		log.Printf("error at job start: %s", err)
+		c.String(http.StatusInternalServerError, "ng")
+	}
+	c.String(http.StatusOK, "ok")
+}
+
 func NewAPIServer() *APIServer {
 	s := &APIServer{
 		Engine: gin.Default(),
@@ -60,16 +71,4 @@ type APIResponseModel struct {
 type APIResponseShowJobs struct {
 	APIResponseModel
 	Jobs map[string]*JobViewModel `json:"jobs"`
-}
-
-type JobViewModel struct {
-	ID   string
-	Name string `json:"name"`
-}
-
-func (j *JobViewModel) Job() *Job {
-	return &Job{
-		ID:   j.ID,
-		Name: j.Name,
-	}
 }
