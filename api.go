@@ -22,6 +22,7 @@ type APIServer struct {
 func (a *APIServer) Setup() {
 	a.GET("/api/v1/procs", a.ShowProcs)
 	a.POST("/api/v1/procs", a.CreateProc)
+	a.GET("/api/v1/procs/:pid", a.ShowProc)
 	a.GET("/api/v1/procs/:pid/start", a.StartProc)
 	a.GET("/api/v1/procs/:pid/log", a.ShowProcLog)
 }
@@ -43,6 +44,13 @@ func (a *APIServer) CreateProc(c *gin.Context) {
 	pvm.ID = id.String()
 	a.Procs[pvm.ID] = pvm.Process()
 	c.IndentedJSON(http.StatusOK, respOK)
+	return
+}
+
+func (a *APIServer) ShowProc(c *gin.Context) {
+	pid := c.Param("pid")
+	proc := a.Procs[pid]
+	c.IndentedJSON(http.StatusOK, APIResponseShowProc{respOK, proc.ViewModel()})
 	return
 }
 
@@ -75,6 +83,10 @@ type APIResponseModel struct {
 	Msg string `json:"message"`
 }
 
+type APIResponseShowProc struct {
+	APIResponseModel
+	Proc *ProcessViewModel `json:"proc"`
+}
 type APIResponseShowProcs struct {
 	APIResponseModel
 	Procs map[string]*ProcessViewModel `json:"procs"`
