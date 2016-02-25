@@ -23,6 +23,7 @@ func (a *APIServer) Setup() {
 	a.GET("/api/v1/procs", a.ShowProcs)
 	a.POST("/api/v1/procs", a.CreateProc)
 	a.GET("/api/v1/procs/:pid/start", a.StartProc)
+	a.GET("/api/v1/procs/:pid/log", a.ShowProcLog)
 }
 
 func (a *APIServer) ShowProcs(c *gin.Context) {
@@ -53,6 +54,12 @@ func (a *APIServer) StartProc(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "ng")
 	}
 	c.String(http.StatusOK, "ok")
+}
+
+func (a *APIServer) ShowProcLog(c *gin.Context) {
+	pid := c.Param("pid")
+	proc := a.Procs[pid]
+	c.String(http.StatusOK, proc.output.String())
 }
 
 func NewAPIServer() *APIServer {

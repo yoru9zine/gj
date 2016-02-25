@@ -1,5 +1,10 @@
 package gj
 
+import (
+	"bytes"
+	"io"
+)
+
 type Processes map[string]*Process
 
 func (j Processes) ViewModels() map[string]*ProcessViewModel {
@@ -15,15 +20,26 @@ type Process struct {
 	Name     string
 	Dir      string
 	Commands []*Command
+	Running  bool
+	Finished bool
+
+	output *bytes.Buffer
 }
 
 func (j *Process) Start() error {
+	j.output = &bytes.Buffer{}
 	for _, cmd := range j.Commands {
-		_, c, err := cmd.Start()
+		f, c, err := cmd.Start()
 		if err != nil {
 			return err
 		}
-		if err := c.Wait(); err != nil {
+		j.Running = true
+		go io.Copy(j.output, f)
+
+		err = c.Wait()
+		j.Running = false
+		j.Finished = true
+		if err != nil {
 			return err
 		}
 	}
@@ -42,6 +58,8 @@ func (j *Process) ViewModel() *ProcessViewModel {
 		Name:     j.Name,
 		Dir:      j.Dir,
 		Commands: cmds,
+		Running:  j.Running,
+		Finished: j.Finished,
 	}
 }
 
@@ -50,6 +68,9 @@ type ProcessViewModel struct {
 	Name     string     `json:"name"`
 	Dir      string     `json:"dir"`
 	Commands [][]string `json:"commands"`
+
+	Running  bool `json:"running"`
+	Finished bool `json:"finished"`
 }
 
 func (j *ProcessViewModel) Process() *Process {
