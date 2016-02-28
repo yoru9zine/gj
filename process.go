@@ -22,19 +22,24 @@ type Process struct {
 	Commands []*Command
 	Running  bool
 	Finished bool
-
-	output *bytes.Buffer
+	PTY      bool
+	output   *bytes.Buffer
 }
 
 func (j *Process) Start() error {
 	j.output = &bytes.Buffer{}
 	for _, cmd := range j.Commands {
-		f, c, err := cmd.Start()
+		_, stdout, stderr, c, err := cmd.Start(&CommandOption{PTY: j.PTY})
 		if err != nil {
 			return err
 		}
 		j.Running = true
-		go io.Copy(j.output, f)
+		if stdout != nil {
+			go io.Copy(j.output, stdout)
+		}
+		if stderr != nil {
+			go io.Copy(j.output, stderr)
+		}
 
 		err = c.Wait()
 		j.Running = false
@@ -60,6 +65,7 @@ func (j *Process) ViewModel() *ProcessViewModel {
 		Commands: cmds,
 		Running:  j.Running,
 		Finished: j.Finished,
+		PTY:      j.PTY,
 	}
 }
 
@@ -71,6 +77,7 @@ type ProcessViewModel struct {
 
 	Running  bool `json:"running"`
 	Finished bool `json:"finished"`
+	PTY      bool `json:"pty"`
 }
 
 func (j *ProcessViewModel) Process() *Process {
@@ -86,5 +93,6 @@ func (j *ProcessViewModel) Process() *Process {
 		Name:     j.Name,
 		Dir:      j.Dir,
 		Commands: cmds,
+		PTY:      j.PTY,
 	}
 }

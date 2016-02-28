@@ -1,7 +1,7 @@
 package gj
 
 import (
-	"os"
+	"io"
 	"os/exec"
 
 	"github.com/kr/pty"
@@ -12,8 +12,12 @@ type Command struct {
 	Args []string
 }
 
-func (c *Command) Start() (*os.File, *exec.Cmd, error) {
+func (c *Command) Start(opt *CommandOption) (io.Writer, io.Reader, io.Reader, *exec.Cmd, error) {
 	cmd := exec.Command(c.Name, c.Args...)
 	f, err := pty.Start(cmd)
-	return f, cmd, err
+	return f, f, nil, cmd, err
+}
+
+type CommandOption struct {
+	PTY bool
 }
