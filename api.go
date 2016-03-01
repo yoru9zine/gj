@@ -1,17 +1,21 @@
 package gj
 
 import (
+	"fmt"
 	"net/http"
 
 	"log"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pborman/uuid"
+	"github.com/yoru9zine/gj/pkg/id"
 )
 
 var (
-	respBadRequest = APIResponseModel{Msg: "bad request"}
-	respOK         = APIResponseModel{Msg: "ok"}
+	respBadRequest    = APIResponseModel{Msg: "bad request"}
+	respNotFound      = APIResponseModel{Msg: "not found"}
+	respDuplicated    = APIResponseModel{Msg: "duplicated"}
+	respInternalError = APIResponseModel{Msg: "internal error"}
+	respOK            = APIResponseModel{Msg: "ok"}
 )
 
 type APIServer struct {
@@ -40,8 +44,8 @@ func (a *APIServer) CreateProc(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, respBadRequest)
 		return
 	}
-	id := uuid.NewUUID()
-	pvm.ID = id.String()
+	id := id.New()
+	pvm.ID = id
 	a.Procs[pvm.ID] = pvm.Process()
 	c.IndentedJSON(http.StatusOK, respOK)
 	return
@@ -49,14 +53,23 @@ func (a *APIServer) CreateProc(c *gin.Context) {
 
 func (a *APIServer) ShowProc(c *gin.Context) {
 	pid := c.Param("pid")
-	proc := a.Procs[pid]
+	proc, apierr := a.findProcess(pid)
+	if apierr != nil {
+		c.IndentedJSON(apierr.Status, apierr.Model)
+		return
+	}
 	c.IndentedJSON(http.StatusOK, APIResponseShowProc{respOK, proc.ViewModel()})
 	return
 }
 
 func (a *APIServer) StartProc(c *gin.Context) {
 	pid := c.Param("pid")
-	err := a.Procs[pid].Start()
+	proc, apierr := a.findProcess(pid)
+	if apierr != nil {
+		c.IndentedJSON(apierr.Status, apierr.Model)
+		return
+	}
+	err := proc.Start()
 	if err != nil {
 		log.Printf("error at starting process: %s", err)
 		c.String(http.StatusInternalServerError, "ng")
@@ -68,6 +81,22 @@ func (a *APIServer) ShowProcLog(c *gin.Context) {
 	pid := c.Param("pid")
 	proc := a.Procs[pid]
 	c.String(http.StatusOK, proc.output.String())
+}
+
+func (a *APIServer) findProcess(pid string) (*Process, *APIError) {
+	proc, err := a.Procs.Find(pid)
+	if err != nil {
+		switch err {
+		case ErrNotUniq:
+			return nil, &APIError{http.StatusConflict, respDuplicated}
+		case ErrProcessNotFound:
+			return nil, &APIError{http.StatusNotFound, respNotFound}
+		default:
+			log.Printf("failed to find process for %s: %s\n", pid, err)
+			return nil, &APIError{http.StatusInternalServerError, respInternalError}
+		}
+	}
+	return proc, nil
 }
 
 func NewAPIServer() *APIServer {
@@ -90,4 +119,13 @@ type APIResponseShowProc struct {
 type APIResponseShowProcs struct {
 	APIResponseModel
 	Procs map[string]*ProcessViewModel `json:"procs"`
+}
+
+type APIError struct {
+	Status int
+	Model  APIResponseModel
+}
+
+func (a APIError) Error() string {
+	return fmt.Sprintf("status: %d, data: %+v", a.Status, a.Model)
 }

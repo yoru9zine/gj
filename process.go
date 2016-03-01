@@ -2,7 +2,15 @@ package gj
 
 import (
 	"bytes"
+	"errors"
 	"io"
+
+	"github.com/yoru9zine/gj/pkg/id"
+)
+
+var (
+	ErrProcessNotFound = errors.New("process not found")
+	ErrNotUniq         = errors.New("multiple process matched")
 )
 
 type Processes map[string]*Process
@@ -13,6 +21,24 @@ func (j Processes) ViewModels() map[string]*ProcessViewModel {
 		models[id] = proc.ViewModel()
 	}
 	return models
+}
+
+func (j Processes) Find(prefix string) (*Process, error) {
+	keys := []string{}
+	for k, _ := range j {
+		keys = append(keys, k)
+	}
+	match, err := id.Search(keys, prefix)
+	if err != nil {
+		switch err {
+		case id.ErrDuplicated:
+			return nil, ErrNotUniq
+		case id.ErrNotFound:
+			return nil, ErrProcessNotFound
+		}
+		return nil, err
+	}
+	return j[match], nil
 }
 
 type Process struct {
