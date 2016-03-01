@@ -1,7 +1,9 @@
 package gj
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 
 	"log"
@@ -38,16 +40,21 @@ func (a *APIServer) ShowProcs(c *gin.Context) {
 }
 
 func (a *APIServer) CreateProc(c *gin.Context) {
+	b, err := ioutil.ReadAll(c.Request.Body)
+	if err != nil {
+		log.Printf("failed to read body: %s", err)
+		c.JSON(http.StatusInternalServerError, respInternalError)
+	}
 	var pvm ProcessViewModel
-	if err := c.BindJSON(&pvm); err != nil {
-		log.Printf("failed to parse json: %s", err)
+	if err := json.Unmarshal(b, &pvm); err != nil {
+		log.Printf("failed to parse json: %s\n`%s`", err, b)
 		c.JSON(http.StatusBadRequest, respBadRequest)
 		return
 	}
 	id := id.New()
 	pvm.ID = id
 	a.Procs[pvm.ID] = pvm.Process()
-	c.IndentedJSON(http.StatusOK, respOK)
+	c.IndentedJSON(http.StatusOK, APIResponseCreateProc{respOK, id})
 	return
 }
 
@@ -115,7 +122,10 @@ func NewAPIServer() *APIServer {
 type APIResponseModel struct {
 	Msg string `json:"message"`
 }
-
+type APIResponseCreateProc struct {
+	APIResponseModel
+	PID string `json:"pid"`
+}
 type APIResponseShowProc struct {
 	APIResponseModel
 	Proc *ProcessViewModel `json:"proc"`

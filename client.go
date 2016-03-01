@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 )
@@ -20,8 +21,8 @@ func NewClient(url string) *Client {
 	}
 }
 
-func (c *Client) call(method, path string) (int, []byte, error) {
-	req, err := http.NewRequest(method, c.url+path, nil)
+func (c *Client) call(method, path string, body io.Reader) (int, []byte, error) {
+	req, err := http.NewRequest(method, c.url+path, body)
 	if err != nil {
 		return 0, nil, fmt.Errorf("failed to create request: %s", err)
 	}
@@ -38,7 +39,7 @@ func (c *Client) call(method, path string) (int, []byte, error) {
 }
 
 func (c *Client) PS() (map[string]*ProcessViewModel, error) {
-	_, b, err := c.call("GET", "/api/v1/procs")
+	_, b, err := c.call("GET", "/api/v1/procs", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to PS request: %s", err)
 	}
@@ -50,7 +51,7 @@ func (c *Client) PS() (map[string]*ProcessViewModel, error) {
 }
 
 func (c *Client) Show(pid string) (*ProcessViewModel, error) {
-	_, b, err := c.call("GET", fmt.Sprintf("/api/v1/procs/%s", pid))
+	_, b, err := c.call("GET", fmt.Sprintf("/api/v1/procs/%s", pid), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to PS request: %s", err)
 	}
@@ -61,8 +62,23 @@ func (c *Client) Show(pid string) (*ProcessViewModel, error) {
 	return respModel.Proc, nil
 }
 
+func (c *Client) Create(r io.Reader) (string, error) {
+	status, b, err := c.call("POST", "/api/v1/procs", r)
+	if err != nil {
+		return "", fmt.Errorf("failed to Create request: %s", err)
+	}
+	if status != 200 {
+		return "", errors.New("failed to create process")
+	}
+	respModel := APIResponseCreateProc{}
+	if err := json.Unmarshal(b, &respModel); err != nil {
+		return "", fmt.Errorf("failed to parse json: %s", err)
+	}
+	return respModel.PID, nil
+}
+
 func (c *Client) Start(pid string) error {
-	status, _, err := c.call("GET", fmt.Sprintf("/api/v1/procs/%s/start", pid))
+	status, _, err := c.call("GET", fmt.Sprintf("/api/v1/procs/%s/start", pid), nil)
 	if err != nil {
 		return fmt.Errorf("failed to Start request: %s", err)
 	}
@@ -73,7 +89,7 @@ func (c *Client) Start(pid string) error {
 }
 
 func (c *Client) Log(pid string) (string, error) {
-	_, b, err := c.call("GET", fmt.Sprintf("/api/v1/procs/%s/log", pid))
+	_, b, err := c.call("GET", fmt.Sprintf("/api/v1/procs/%s/log", pid), nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to Log request: %s", err)
 	}
