@@ -79,7 +79,11 @@ func (a *APIServer) StartProc(c *gin.Context) {
 
 func (a *APIServer) ShowProcLog(c *gin.Context) {
 	pid := c.Param("pid")
-	proc := a.Procs[pid]
+	proc, apierr := a.findProcess(pid)
+	if apierr != nil {
+		c.IndentedJSON(apierr.Status, apierr.Model)
+		return
+	}
 	c.String(http.StatusOK, proc.output.String())
 }
 
