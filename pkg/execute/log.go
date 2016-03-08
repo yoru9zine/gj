@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"path"
-	"time"
 )
 
 type ProcessLogWriter struct {
@@ -33,8 +32,6 @@ func newProcessLogWriter(filePath string) (*ProcessLogWriter, error) {
 }
 
 func (w *ProcessLogWriter) Close() error {
-	m.Lock()
-	defer m.Unlock()
 	l := logline{EOF: true}
 	for _, t := range []string{"stdout", "stderr", "stdin"} {
 		l.Type = t
@@ -47,23 +44,9 @@ func (w *ProcessLogWriter) Close() error {
 }
 
 func (w *ProcessLogWriter) WriteOutput2(line []byte, logtype string) {
-	m.Lock()
-	defer m.Unlock()
 	w.enc.Encode(&logline{Type: logtype, Data: line})
 }
 
-/*
-func (w *ProcessLogWriter) WriteOutput(buf []byte, r io.Reader, logtype string) {
-	n, err := r.Read(buf)
-	if err != nil {
-		if err == io.EOF {
-			return
-		}
-		w.err = err
-	}
-	w.enc.Encode(&logline{Type: logtype, Data: buf[:n]})
-}
-*/
 type logline struct {
 	Type string `json:"type"`
 	Data []byte `json:"data"`
@@ -73,9 +56,9 @@ type logline struct {
 type ProcessLogReader struct {
 	f      *os.File
 	err    error
-	Stdout *LogReadWriter
-	Stderr *LogReadWriter
-	Stdin  *LogReadWriter
+	Stdout *logBuffer
+	Stderr *logBuffer
+	Stdin  *logBuffer
 }
 
 func NewProcessLogReader(opt *ProcessOption) (*ProcessLogReader, error) {
@@ -85,9 +68,9 @@ func NewProcessLogReader(opt *ProcessOption) (*ProcessLogReader, error) {
 		return nil, err
 	}
 	r.f = f
-	r.Stdout = &LogReadWriter{}
-	r.Stderr = &LogReadWriter{}
-	r.Stdin = &LogReadWriter{}
+	r.Stdout = newLogBuffer(128)
+	r.Stderr = newLogBuffer(128)
+	r.Stdin = newLogBuffer(128)
 	return r, nil
 }
 
@@ -114,7 +97,7 @@ func (r *ProcessLogReader) Start() {
 			r.err = err
 			return
 		}
-		var w *LogReadWriter
+		var w *logBuffer
 		switch line.Type {
 		case "stdout":
 			w = r.Stdout
@@ -124,7 +107,9 @@ func (r *ProcessLogReader) Start() {
 			w = r.Stdin
 		}
 		w.Write(line.Data)
-		w.setEOF(line.EOF)
+		if line.EOF {
+			w.Close()
+		}
 	}
 }
 
@@ -132,36 +117,27 @@ func (r *ProcessLogReader) Close() error {
 	return r.f.Close()
 }
 
-type LogReadWriter struct {
-	buf bytes.Buffer
-	eof bool
+type logBuffer struct {
+	c chan []byte
 }
 
-func (l *LogReadWriter) Read(p []byte) (int, error) {
-	for {
-		m.Lock()
-		bufsize := l.buf.Len()
-		if bufsize > 0 {
-			defer m.Unlock()
-			return l.buf.Read(p)
-		}
-		if l.eof {
-			defer m.Unlock()
-			return 0, io.EOF
-		}
-		m.Unlock()
-		time.Sleep(100 * time.Millisecond)
+func newLogBuffer(bufsize int) *logBuffer {
+	return &logBuffer{c: make(chan []byte, bufsize)}
+}
+
+func (l *logBuffer) Read(p []byte) (int, error) {
+	for l := range l.c {
+		copy(p, l)
+		return len(l), nil
 	}
+	return 0, io.EOF
 }
 
-func (l *LogReadWriter) Write(p []byte) (int, error) {
-	m.Lock()
-	defer m.Unlock()
-	return l.buf.Write(p)
+func (l *logBuffer) Write(p []byte) (int, error) {
+	l.c <- p
+	return len(p), nil
 }
 
-func (l *LogReadWriter) setEOF(b bool) {
-	m.Lock()
-	defer m.Unlock()
-	l.eof = b
+func (l *logBuffer) Close() {
+	close(l.c)
 }

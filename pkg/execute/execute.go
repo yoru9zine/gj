@@ -8,12 +8,9 @@ import (
 	"os/exec"
 	"sync"
 	"syscall"
-	"time"
 
 	"github.com/kr/pty"
 )
-
-var m sync.Mutex
 
 type Process struct {
 	Stdin     io.WriteCloser
@@ -24,9 +21,11 @@ type Process struct {
 	pty       *os.File
 
 	readerChannels map[string]*reader2chan
+	handleFinish   chan struct{}
 }
 
 func (p *Process) Start() error {
+	p.handleFinish = make(chan struct{})
 	if p.tty != nil {
 		defer p.tty.Close()
 	}
@@ -34,11 +33,10 @@ func (p *Process) Start() error {
 }
 
 func (p *Process) Wait() error {
-	p.m.Lock()
-	defer p.m.Unlock()
 	cmdErr := p.cmd.Wait()
 	for _, c := range p.readerChannels {
 		c.Stop()
+		<-p.handleFinish
 	}
 	if err := p.logWriter.Close(); err != nil {
 		return fmt.Errorf("failed to close log: %s", err)
@@ -46,21 +44,11 @@ func (p *Process) Wait() error {
 	return cmdErr
 }
 
-/*
-func (p *Process) handleInput(r io.Reader, logType string) {
-	buf := make([]byte, 1024)
-	for {
-		p.m.Lock()
-		p.logWriter.WriteOutput(buf, r, logType)
-		time.Sleep(100 * time.Millisecond)
-		p.m.Unlock()
-	}
-}
-*/
 func (p *Process) handleInput2(c chan []byte, logType string) {
 	for line := range c {
 		p.logWriter.WriteOutput2(line, logType)
 	}
+	p.handleFinish <- struct{}{}
 }
 
 type ProcessOption struct {
@@ -143,35 +131,4 @@ func ExecutePTY(opt *ProcessOption, cmds ...string) (*Process, error) {
 		go p.handleInput2(c.Channel, t)
 	}
 	return p, nil
-}
-
-type reader2chan struct {
-	reader  io.Reader
-	Channel chan []byte
-	fin     chan struct{}
-}
-
-func (r *reader2chan) Start() {
-	buf := make([]byte, 1024)
-	for {
-		select {
-		case <-r.fin:
-			break
-		case <-time.After(100 * time.Millisecond):
-			m.Lock()
-			n, err := r.reader.Read(buf)
-			m.Unlock()
-			if err != nil {
-				if err == io.EOF {
-					continue
-				}
-				close(r.Channel)
-			}
-			r.Channel <- buf[:n]
-		}
-	}
-}
-
-func (r *reader2chan) Stop() {
-	r.fin <- struct{}{}
 }

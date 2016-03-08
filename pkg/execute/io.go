@@ -1,6 +1,9 @@
 package execute
 
-import "io"
+import (
+	"io"
+	"time"
+)
 
 type multiIO struct {
 	ioObjects []interface{}
@@ -39,4 +42,34 @@ func (m multiIO) Close() error {
 		}
 	}
 	return err
+}
+
+type reader2chan struct {
+	reader  io.Reader
+	Channel chan []byte
+	fin     chan struct{}
+}
+
+func (r *reader2chan) Start() {
+	for {
+		select {
+		case <-r.fin:
+			close(r.Channel)
+			break
+		case <-time.After(100 * time.Millisecond):
+			buf := make([]byte, 1024)
+			n, err := r.reader.Read(buf)
+			if err != nil {
+				if err == io.EOF {
+					continue
+				}
+				close(r.Channel)
+			}
+			r.Channel <- buf[:n]
+		}
+	}
+}
+
+func (r *reader2chan) Stop() {
+	r.fin <- struct{}{}
 }

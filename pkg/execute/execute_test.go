@@ -1,7 +1,7 @@
 package execute
 
 import (
-	"io/ioutil"
+	"io"
 	"log"
 	"testing"
 )
@@ -26,12 +26,21 @@ func TestHoge(t *testing.T) {
 		log.Fatalf("failed to create log reader: %s", err)
 	}
 	go r.Start()
+	go func() {
+		buf := make([]byte, 1024)
+		for {
+			n, err := r.Stdout.Read(buf)
+			if err != nil {
+				if err != io.EOF {
+					log.Fatalf("failed to read stdout: %s", err)
+				}
+				break
+			}
+			log.Printf("%s", buf[:n])
+		}
+	}()
 	if err := p.Wait(); err != nil {
 		log.Fatalf("failed to wait process: %s", err)
 	}
-	b, err := ioutil.ReadAll(r.Stdout)
-	if err != nil {
-		log.Fatalf("failed to read stdout:%s", err)
-	}
-	println(string(b))
+
 }
