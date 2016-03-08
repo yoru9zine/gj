@@ -44,9 +44,9 @@ func (p *Process) Wait() error {
 	return cmdErr
 }
 
-func (p *Process) handleInput2(c chan []byte, logType string) {
+func (p *Process) handleInput(c chan []byte, logType string) {
 	for line := range c {
-		p.logWriter.WriteOutput2(line, logType)
+		p.logWriter.WriteOutput(line, logType)
 	}
 	p.handleFinish <- struct{}{}
 }
@@ -128,7 +128,7 @@ func ExecutePTY(opt *ProcessOption, cmds ...string) (*Process, error) {
 	p.readerChannels["stdout"] = &reader2chan{reader: pty, Channel: make(chan []byte), fin: make(chan struct{})}
 	for t, c := range p.readerChannels {
 		go c.Start()
-		go p.handleInput2(c.Channel, t)
+		go p.handleInput(c.Channel, t)
 	}
 	return p, nil
 }

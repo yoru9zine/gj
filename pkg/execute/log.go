@@ -43,7 +43,7 @@ func (w *ProcessLogWriter) Close() error {
 	return w.f.Close()
 }
 
-func (w *ProcessLogWriter) WriteOutput2(line []byte, logtype string) {
+func (w *ProcessLogWriter) WriteOutput(line []byte, logtype string) {
 	w.enc.Encode(&logline{Type: logtype, Data: line})
 }
 
