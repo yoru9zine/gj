@@ -50,12 +50,20 @@ type reader2chan struct {
 	fin     chan struct{}
 }
 
+func newReader2Chan(r io.Reader) *reader2chan {
+	return &reader2chan{
+		reader:  r,
+		Channel: make(chan []byte),
+		fin:     make(chan struct{}),
+	}
+}
+
 func (r *reader2chan) Start() {
 	for {
 		select {
 		case <-r.fin:
 			close(r.Channel)
-			break
+			return
 		case <-time.After(100 * time.Millisecond):
 			buf := make([]byte, 1024)
 			n, err := r.reader.Read(buf)
@@ -64,6 +72,7 @@ func (r *reader2chan) Start() {
 					continue
 				}
 				close(r.Channel)
+				return
 			}
 			r.Channel <- buf[:n]
 		}

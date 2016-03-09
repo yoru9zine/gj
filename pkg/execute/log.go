@@ -4,34 +4,24 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 	"os"
-	"path"
 )
 
-type ProcessLogWriter struct {
-	f   *os.File
+type processLogWriter struct {
+	out io.WriteCloser
 	enc *json.Encoder
 	err error
 }
 
-func newProcessLogWriter(filePath string) (*ProcessLogWriter, error) {
-	l := &ProcessLogWriter{}
-	dir := path.Dir(filePath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create `%s`: %s", dir, err)
-	}
-	f, err := os.Create(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create ``")
-	}
-	l.f = f
-	l.enc = json.NewEncoder(f)
+func newProcessLogWriter(out io.WriteCloser) (*processLogWriter, error) {
+	l := &processLogWriter{}
+	l.out = out
+	l.enc = json.NewEncoder(out)
 	return l, nil
 }
 
-func (w *ProcessLogWriter) Close() error {
+func (w *processLogWriter) Close() error {
 	l := logline{EOF: true}
 	for _, t := range []string{"stdout", "stderr", "stdin"} {
 		l.Type = t
@@ -40,11 +30,11 @@ func (w *ProcessLogWriter) Close() error {
 			return err
 		}
 	}
-	return w.f.Close()
+	return w.out.Close()
 }
 
-func (w *ProcessLogWriter) WriteOutput(line []byte, logtype string) {
-	w.enc.Encode(&logline{Type: logtype, Data: line})
+func (w *processLogWriter) Write(line []byte, logtype string) error {
+	return w.enc.Encode(&logline{Type: logtype, Data: line})
 }
 
 type logline struct {
