@@ -3,8 +3,6 @@ package execute
 import (
 	"bytes"
 	"encoding/json"
-	"io"
-	"log"
 	"reflect"
 	"testing"
 )
@@ -15,8 +13,8 @@ func (t *tmpLog) Close() error { return nil }
 
 func TestWaitBeforeStart(t *testing.T) {
 	l := &tmpLog{}
-	opt := &ProcessOption{LogWriteCloser: l}
-	p, err := ExecutePTY(opt, "ls")
+	opt := &ProcessOption{LogIO: l, AllocatePTY: true}
+	p, err := NewProcess(opt, "ls")
 	if err != nil {
 		t.Fatalf("failed to create process: %s", err)
 	}
@@ -27,8 +25,8 @@ func TestWaitBeforeStart(t *testing.T) {
 
 func TestLogging(t *testing.T) {
 	l := &tmpLog{}
-	opt := &ProcessOption{LogWriteCloser: l}
-	p, err := Execute(opt, "sh", "-c", "echo 1 && sleep 1 && echo 2 1>&2")
+	opt := &ProcessOption{LogIO: l}
+	p, err := NewProcess(opt, "sh", "-c", "echo 1 && sleep 1 && echo 2 1>&2")
 	if err != nil {
 		t.Fatalf("failed to create process: %s", err)
 	}
@@ -61,8 +59,8 @@ func TestLogging(t *testing.T) {
 
 func TestPTYLogging(t *testing.T) {
 	l := &tmpLog{}
-	opt := &ProcessOption{LogWriteCloser: l}
-	p, err := ExecutePTY(opt, "sh", "-c", "echo 1 && sleep 1 && echo 2 1>&2")
+	opt := &ProcessOption{LogIO: l, AllocatePTY: true}
+	p, err := NewProcess(opt, "sh", "-c", "echo 1 && sleep 1 && echo 2 1>&2")
 	if err != nil {
 		t.Fatalf("failed to create process: %s", err)
 	}
@@ -96,9 +94,11 @@ func TestPTYLogging(t *testing.T) {
 func TestPTYInteractiveLog(t *testing.T) {
 	l := &tmpLog{}
 	opt := &ProcessOption{
-		LogWriteCloser: l,
-		Env:            []string{"PS1=$ "}}
-	p, err := ExecutePTY(opt, "sh")
+		LogIO:       l,
+		Env:         []string{"PS1=$ "},
+		AllocatePTY: true,
+	}
+	p, err := NewProcess(opt, "sh")
 	if err != nil {
 		t.Fatalf("failed to create process: %s", err)
 	}
@@ -137,41 +137,21 @@ func TestPTYInteractiveLog(t *testing.T) {
 	}
 }
 
-func TestHoge(t *testing.T) {
-	opt := &ProcessOption{
-		Dir:  "./log",
-		Name: "test",
+func TestProcessLogReader(t *testing.T) {
+	l := &tmpLog{}
+	enc := json.NewEncoder(l)
+	for _, line := range []logline{
+		{Type: "stdout", Data: []byte("123"), EOF: false},
+		{Type: "stdout", EOF: true},
+		{Type: "stderr", EOF: true},
+		{Type: "stdin", EOF: true},
+	} {
+		enc.Encode(line)
 	}
-
-	p, err := ExecutePTY(opt, "ping", "-c 5", "127.0.0.1")
-	//p, err := ExecutePTY(opt, "ls")
-	if err != nil {
-		log.Fatalf("failed to setup process: %s", err)
-	}
-	if err := p.Start(); err != nil {
-		log.Fatalf("failed to start process: %s", err)
-	}
-
+	opt := &ProcessOption{LogIO: l}
 	r, err := NewProcessLogReader(opt)
 	if err != nil {
-		log.Fatalf("failed to create log reader: %s", err)
+		t.Fatalf("failed to create process: %s", err)
 	}
-	go r.Start()
-	go func() {
-		buf := make([]byte, 1024)
-		for {
-			n, err := r.Stdout.Read(buf)
-			if err != nil {
-				if err != io.EOF {
-					log.Fatalf("failed to read stdout: %s", err)
-				}
-				break
-			}
-			log.Printf("%s", buf[:n])
-		}
-	}()
-	if err := p.Wait(); err != nil {
-		log.Fatalf("failed to wait process: %s", err)
-	}
-
+	r.Start()
 }

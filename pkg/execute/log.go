@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"os"
 )
 
 type processLogWriter struct {
@@ -43,17 +42,19 @@ type logline struct {
 	EOF  bool   `json:"eof"`
 }
 
+//ProcessLogReader represents reader for process log
 type ProcessLogReader struct {
-	f      *os.File
+	f      io.ReadCloser
 	err    error
 	Stdout *logBuffer
 	Stderr *logBuffer
 	Stdin  *logBuffer
 }
 
+//NewProcessLogReader returns new ProcessLogReader
 func NewProcessLogReader(opt *ProcessOption) (*ProcessLogReader, error) {
 	r := &ProcessLogReader{}
-	f, err := os.Open(opt.logFile())
+	f, err := opt.readCloser()
 	if err != nil {
 		return nil, err
 	}
@@ -64,11 +65,18 @@ func NewProcessLogReader(opt *ProcessOption) (*ProcessLogReader, error) {
 	return r, nil
 }
 
+// Start starts read process
 func (r *ProcessLogReader) Start() {
 	rr := bufio.NewReader(r.f)
 	line := logline{}
-	var buf bytes.Buffer
+	var (
+		buf    bytes.Buffer
+		closed int
+	)
 	for {
+		if closed == 3 {
+			break
+		}
 		l, isPrefix, err := rr.ReadLine()
 		if err != nil {
 			if err == io.EOF {
@@ -98,11 +106,13 @@ func (r *ProcessLogReader) Start() {
 		}
 		w.Write(line.Data)
 		if line.EOF {
+			closed++
 			w.Close()
 		}
 	}
 }
 
+// Close closes opened files
 func (r *ProcessLogReader) Close() error {
 	return r.f.Close()
 }

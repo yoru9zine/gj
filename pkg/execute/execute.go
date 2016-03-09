@@ -25,8 +25,8 @@ type ProcessOption struct {
 	Name string
 	Env  []string
 
-	LogWriteCloser io.WriteCloser
-	AllocatePTY    bool
+	LogIO       interface{}
+	AllocatePTY bool
 }
 
 func (o *ProcessOption) logFile() string {
@@ -34,8 +34,8 @@ func (o *ProcessOption) logFile() string {
 }
 
 func (o *ProcessOption) writeCloser() (io.WriteCloser, error) {
-	if o.LogWriteCloser != nil {
-		return o.LogWriteCloser, nil
+	if o.LogIO != nil {
+		return multiIO{[]interface{}{o.LogIO}}, nil
 	}
 	dir := path.Dir(o.logFile())
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -43,7 +43,18 @@ func (o *ProcessOption) writeCloser() (io.WriteCloser, error) {
 	}
 	f, err := os.Create(o.logFile())
 	if err != nil {
-		return nil, fmt.Errorf("failed to create ``")
+		return nil, fmt.Errorf("failed to create `%s`: %s", o.logFile(), err)
+	}
+	return f, nil
+}
+
+func (o *ProcessOption) readCloser() (io.ReadCloser, error) {
+	if o.LogIO != nil {
+		return multiIO{[]interface{}{o.LogIO}}, nil
+	}
+	f, err := os.Open(o.logFile())
+	if err != nil {
+		return nil, fmt.Errorf("failed to open `%s`: %s", o.logFile(), err)
 	}
 	return f, nil
 }
@@ -66,6 +77,10 @@ type Process struct {
 
 // Start starts process
 func (p *Process) Start() error {
+	for t, c := range p.readerChannels {
+		go c.Start()
+		go p.handleInput(c.Channel, t)
+	}
 	p.handleFinish = make(chan struct{})
 	if p.tty != nil {
 		defer p.tty.Close()
@@ -99,7 +114,15 @@ func (p *Process) handleInput(c chan []byte, logType string) {
 	p.handleFinish <- struct{}{}
 }
 
-func Execute(opt *ProcessOption, cmds ...string) (*Process, error) {
+// NewProcess create and returns new Process
+func NewProcess(opt *ProcessOption, cmds ...string) (*Process, error) {
+	if opt.AllocatePTY {
+		return executePTY(opt, cmds...)
+	}
+	return execute(opt, cmds...)
+}
+
+func execute(opt *ProcessOption, cmds ...string) (*Process, error) {
 	cmd := exec.Command(cmds[0], cmds[1:]...)
 	cmd.Env = opt.Env
 	f, err := opt.writeCloser()
@@ -124,22 +147,19 @@ func Execute(opt *ProcessOption, cmds ...string) (*Process, error) {
 	}
 	stdinbuf := &bytes.Buffer{}
 	p := &Process{
-		Stdin:     &multiIO{ioObjects: []interface{}{stdin, stdinbuf}},
-		cmd:       cmd,
-		logWriter: logwriter,
+		Stdin:          &multiIO{ioObjects: []interface{}{stdin, stdinbuf}},
+		cmd:            cmd,
+		logWriter:      logwriter,
+		readerChannels: map[string]*reader2chan{},
 	}
-	p.readerChannels = map[string]*reader2chan{}
 	p.readerChannels["stdout"] = newReader2Chan(stdout)
 	p.readerChannels["stderr"] = newReader2Chan(stderr)
 	p.readerChannels["stdin"] = newReader2Chan(stdinbuf)
-	for t, c := range p.readerChannels {
-		go c.Start()
-		go p.handleInput(c.Channel, t)
-	}
+
 	return p, nil
 }
 
-func ExecutePTY(opt *ProcessOption, cmds ...string) (*Process, error) {
+func executePTY(opt *ProcessOption, cmds ...string) (*Process, error) {
 	cmd := exec.Command(cmds[0], cmds[1:]...)
 	cmd.Env = opt.Env
 	f, err := opt.writeCloser()
@@ -166,18 +186,14 @@ func ExecutePTY(opt *ProcessOption, cmds ...string) (*Process, error) {
 	cmd.SysProcAttr.Setsid = true
 
 	p := &Process{
-		Stdin:     pty,
-		cmd:       cmd,
-		logWriter: logwriter,
-		tty:       tty,
-		pty:       pty,
+		Stdin:          pty,
+		cmd:            cmd,
+		logWriter:      logwriter,
+		tty:            tty,
+		pty:            pty,
+		readerChannels: map[string]*reader2chan{},
 	}
-
-	p.readerChannels = map[string]*reader2chan{}
 	p.readerChannels["stdout"] = newReader2Chan(pty)
-	for t, c := range p.readerChannels {
-		go c.Start()
-		go p.handleInput(c.Channel, t)
-	}
+
 	return p, nil
 }
