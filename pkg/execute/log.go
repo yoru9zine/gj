@@ -45,10 +45,12 @@ type logline struct {
 //ProcessLogReader represents reader for process log
 type ProcessLogReader struct {
 	f      io.ReadCloser
+	br     *bufio.Reader
 	err    error
 	Stdout *logBuffer
 	Stderr *logBuffer
 	Stdin  *logBuffer
+	fin    chan struct{}
 }
 
 //NewProcessLogReader returns new ProcessLogReader
@@ -59,61 +61,86 @@ func NewProcessLogReader(opt *ProcessOption) (*ProcessLogReader, error) {
 		return nil, err
 	}
 	r.f = f
+	r.br = bufio.NewReader(f)
 	r.Stdout = newLogBuffer(128)
 	r.Stderr = newLogBuffer(128)
 	r.Stdin = newLogBuffer(128)
+	r.fin = make(chan struct{})
 	return r, nil
+}
+
+func (r *ProcessLogReader) readline() ([]byte, error) {
+	var buf bytes.Buffer
+	for {
+		l, prefix, err := r.br.ReadLine()
+		if err != nil {
+			return nil, err
+		}
+		buf.Write(l)
+		if prefix {
+			continue
+		}
+		return buf.Bytes(), nil
+	}
+}
+
+func (r *ProcessLogReader) writeLine(l *logline) (closed bool) {
+	var w *logBuffer
+	switch l.Type {
+	case "stdout":
+		w = r.Stdout
+	case "stderr":
+		w = r.Stderr
+	case "stdin":
+		w = r.Stdin
+	}
+	if _, err := w.Write(l.Data); err != nil {
+		r.err = err
+		return true
+	}
+	if l.EOF {
+		w.Close()
+		return true
+	}
+	return false
 }
 
 // Start starts read process
 func (r *ProcessLogReader) Start() {
-	rr := bufio.NewReader(r.f)
 	line := logline{}
 	var (
-		buf    bytes.Buffer
 		closed int
 	)
 	for {
-		if closed == 3 {
-			break
-		}
-		l, isPrefix, err := rr.ReadLine()
-		if err != nil {
-			if err == io.EOF {
-				continue
+		select {
+		case <-r.fin:
+			return
+		default:
+			if closed == 3 { // stdin/stdout/stderr
+				return
 			}
-			r.err = err
-			return
-		}
-		buf.Write(l)
-		if isPrefix {
-			continue
-		}
-		b := buf.Bytes()
-		buf.Reset()
-		if err := json.Unmarshal(b, &line); err != nil {
-			r.err = err
-			return
-		}
-		var w *logBuffer
-		switch line.Type {
-		case "stdout":
-			w = r.Stdout
-		case "stderr":
-			w = r.Stderr
-		case "stdin":
-			w = r.Stdin
-		}
-		w.Write(line.Data)
-		if line.EOF {
-			closed++
-			w.Close()
+			l, err := r.readline()
+			if err != nil {
+				if err == io.EOF {
+					continue
+				}
+				r.err = err
+				return
+			}
+			if err := json.Unmarshal(l, &line); err != nil {
+				r.err = err
+				return
+			}
+			if c := r.writeLine(&line); c {
+				closed++
+			}
 		}
 	}
 }
 
 // Close closes opened files
 func (r *ProcessLogReader) Close() error {
+	r.fin <- struct{}{}
 	return r.f.Close()
 }
 

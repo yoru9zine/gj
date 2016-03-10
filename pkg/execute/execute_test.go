@@ -3,6 +3,8 @@ package execute
 import (
 	"bytes"
 	"encoding/json"
+	"io"
+	"io/ioutil"
 	"reflect"
 	"testing"
 )
@@ -26,7 +28,7 @@ func TestWaitBeforeStart(t *testing.T) {
 func TestLogging(t *testing.T) {
 	l := &tmpLog{}
 	opt := &ProcessOption{LogIO: l}
-	p, err := NewProcess(opt, "sh", "-c", "echo 1 && sleep 1 && echo 2 1>&2")
+	p, err := NewProcess(opt, "sh", "-c", "echo 1 && sleep 0.1 && echo 2 1>&2")
 	if err != nil {
 		t.Fatalf("failed to create process: %s", err)
 	}
@@ -60,7 +62,7 @@ func TestLogging(t *testing.T) {
 func TestPTYLogging(t *testing.T) {
 	l := &tmpLog{}
 	opt := &ProcessOption{LogIO: l, AllocatePTY: true}
-	p, err := NewProcess(opt, "sh", "-c", "echo 1 && sleep 1 && echo 2 1>&2")
+	p, err := NewProcess(opt, "sh", "-c", "echo 1 && sleep 0.1 && echo 2 1>&2")
 	if err != nil {
 		t.Fatalf("failed to create process: %s", err)
 	}
@@ -142,6 +144,8 @@ func TestProcessLogReader(t *testing.T) {
 	enc := json.NewEncoder(l)
 	for _, line := range []logline{
 		{Type: "stdout", Data: []byte("123"), EOF: false},
+		{Type: "stderr", Data: []byte("456"), EOF: false},
+		{Type: "stdin", Data: []byte("789"), EOF: false},
 		{Type: "stdout", EOF: true},
 		{Type: "stderr", EOF: true},
 		{Type: "stdin", EOF: true},
@@ -153,5 +157,22 @@ func TestProcessLogReader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create process: %s", err)
 	}
-	r.Start()
+	go r.Start()
+
+	for _, c := range []struct {
+		Reader   io.Reader
+		Expected []byte
+	}{
+		{Reader: r.Stdout, Expected: []byte("123")},
+		{Reader: r.Stderr, Expected: []byte("456")},
+		{Reader: r.Stdin, Expected: []byte("789")},
+	} {
+		b, err := ioutil.ReadAll(c.Reader)
+		if err != nil {
+			t.Errorf("error at read: %s", err)
+		}
+		if bytes.Compare(b, c.Expected) != 0 {
+			t.Errorf("output not match: got=`%s`, expected=`%s`", b, c.Expected)
+		}
+	}
 }
