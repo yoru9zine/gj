@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
+	"strings"
 
 	"log"
 
@@ -21,6 +23,7 @@ var (
 )
 
 type APIServer struct {
+	logDir string
 	*gin.Engine
 	Procs Processes
 }
@@ -76,8 +79,12 @@ func (a *APIServer) StartProc(c *gin.Context) {
 		c.IndentedJSON(apierr.Status, apierr.Model)
 		return
 	}
-	err := proc.Start()
-	if err != nil {
+	logDir := fmt.Sprintf("%s/%s", a.logDir, pid)
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		log.Printf("failed to create logdir `%s`: %s", logDir, err)
+		c.IndentedJSON(http.StatusInternalServerError, respInternalError)
+	}
+	if err := proc.Start(logDir); err != nil {
 		log.Printf("error at starting process: %s", err)
 		c.String(http.StatusInternalServerError, "ng")
 	}
@@ -110,8 +117,9 @@ func (a *APIServer) findProcess(pid string) (*Process, *APIError) {
 	return proc, nil
 }
 
-func NewAPIServer() *APIServer {
+func NewAPIServer(logDir string) *APIServer {
 	s := &APIServer{
+		logDir: strings.TrimSuffix(logDir, "/"),
 		Engine: gin.Default(),
 		Procs:  map[string]*Process{},
 	}

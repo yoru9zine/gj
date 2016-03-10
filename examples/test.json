@@ -1,1 +1,1 @@
-{"name": "1", "commands": [["ls"]], "pty": true}
+{"name": "1", "commands": [["ls"], ["pwd"]], "pty": true}

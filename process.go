@@ -3,7 +3,9 @@ package gj
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
+	"os"
 
 	"github.com/yoru9zine/gj/pkg/id"
 )
@@ -52,27 +54,47 @@ type Process struct {
 	output   *bytes.Buffer
 }
 
-func (j *Process) Start() error {
+func (j *Process) Start(logDir string) error {
 	j.output = &bytes.Buffer{}
-	for _, cmd := range j.Commands {
-		_, stdout, stderr, c, err := cmd.Start(&CommandOption{PTY: j.PTY})
-		if err != nil {
+	for i, cmd := range j.Commands {
+		logPath := fmt.Sprintf("%s/%d", logDir, i+1)
+		if err := j.start(cmd, logPath); err != nil {
 			return err
 		}
-		j.Running = true
-		if stdout != nil {
-			go io.Copy(j.output, stdout)
-		}
-		if stderr != nil {
-			go io.Copy(j.output, stderr)
-		}
+	}
+	return nil
+}
 
-		err = c.Wait()
-		j.Running = false
-		j.Finished = true
-		if err != nil {
-			return err
-		}
+func (j *Process) start(cmd *Command, logPath string) error {
+	w, err := os.Create(logPath)
+	if err != nil {
+		return fmt.Errorf("failed to create log `%s`: %s", logPath, err)
+	}
+	defer w.Close()
+
+	logTap := &bytes.Buffer{}
+	mw := io.MultiWriter(w, logTap)
+
+	defer func() {
+		clr := newCommandLogReader(logTap)
+		io.Copy(j.output, clr.Stdout)
+		io.Copy(j.output, clr.Stderr)
+	}()
+
+	_, c, err := cmd.Start(&CommandOption{
+		PTY:       j.PTY,
+		LogWriter: mw,
+	})
+	if err != nil {
+		return err
+	}
+
+	j.Running = true
+	err = c.Wait()
+	j.Running = false
+	j.Finished = true
+	if err != nil {
+		return err
 	}
 	return nil
 }
