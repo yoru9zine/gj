@@ -9,11 +9,11 @@ import (
 )
 
 func init() {
-	RootCmd.AddCommand(LogCmd)
+	RootCmd.AddCommand(LogsCmd)
 }
 
-var LogCmd = &cobra.Command{
-	Use:   "log",
+var LogsCmd = &cobra.Command{
+	Use:   "logs",
 	Short: "Show process log",
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) != 1 {
